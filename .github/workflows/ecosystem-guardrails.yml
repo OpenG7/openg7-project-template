@@ -38,5 +38,16 @@ jobs:
       - name: Install dependencies
         if: steps.pm.outputs.pm != 'none'
         run: ${{ steps.pm.outputs.install }}
+      - name: Check for ecosystem boundary script
+        id: guardrail
+        shell: bash
+        run: |
+          if [ -f tools/check-ecosystem-boundaries.js ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "No tools/check-ecosystem-boundaries.js in this repository; skipping ecosystem guardrails." >> "$GITHUB_STEP_SUMMARY"
+          fi
       - name: Run ecosystem guardrails
+        if: steps.guardrail.outputs.present == 'true'
         run: node tools/check-ecosystem-boundaries.js
