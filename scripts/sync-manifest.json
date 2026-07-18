@@ -1,0 +1,25 @@
+{
+  "description": "Fichiers du contrat de gouvernance OpenG7, propagés depuis ce template vers les dépôts produits (ex. openg7-nexus). README.md et l'outillage sous scripts/ ou .github/workflows/template-quality.yml restent propres au dépôt template et ne sont pas synchronisés.",
+  "files": [
+    "AGENTS.md",
+    "docs/ARCHITECTURE.md",
+    ".github/copilot-instructions.md",
+    ".github/pull_request_template.md",
+    ".github/instructions/angular.instructions.md",
+    ".github/instructions/backend.instructions.md",
+    ".github/instructions/database.instructions.md",
+    ".github/instructions/documentation.instructions.md",
+    ".github/ISSUE_TEMPLATE/bug_report.md",
+    ".github/ISSUE_TEMPLATE/config.yml",
+    ".github/ISSUE_TEMPLATE/feature_request.md",
+    ".github/ISSUE_TEMPLATE/good_first_issue.md",
+    ".github/workflows/claude-pr.yml",
+    ".github/workflows/codex-pr.yml",
+    ".github/workflows/gemini-pr.yml",
+    ".github/workflows/copilot-pr.yml",
+    ".github/workflows/ecosystem-guardrails.yml",
+    ".agents/skills/README.md",
+    ".agents/skills/create-angular-component/SKILL.md",
+    ".agents/skills/architecture-review/SKILL.md"
+  ]
+}

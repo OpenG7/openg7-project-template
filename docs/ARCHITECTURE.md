@@ -6,7 +6,7 @@
 
 This document defines the durable architectural principles of the `openg7-nexus` repository. It describes workspace boundaries, dependency rules, front-end composition, CMS integration, build flows, and the conventions used to keep OpenG7 maintainable as the ecosystem grows.
 
-`ARCHITECTURE.md` explains **why and where**. [`AGENTS.md`](./AGENTS.md) defines **how agents and contributors must execute the work**.
+`ARCHITECTURE.md` explains **why and where**. [`AGENTS.md`](../AGENTS.md) defines **how agents and contributors must execute the work**.
 
 ## Architectural Principles
 
@@ -208,7 +208,7 @@ Update `ARCHITECTURE.md` for durable principles and `AGENTS.md` for executable i
 
 Ce document définit les principes architecturaux durables du dépôt `openg7-nexus`. Il décrit les frontières entre workspaces, les règles de dépendance, la composition du front, l'intégration au CMS et les conventions qui permettent à OpenG7 de grandir sans perdre en cohérence.
 
-`ARCHITECTURE.md` explique **pourquoi et où**. [`AGENTS.md`](./AGENTS.md) définit **comment les agents et les contributeurs doivent exécuter le travail**.
+`ARCHITECTURE.md` explique **pourquoi et où**. [`AGENTS.md`](../AGENTS.md) définit **comment les agents et les contributeurs doivent exécuter le travail**.
 
 ## Principes architecturaux
 

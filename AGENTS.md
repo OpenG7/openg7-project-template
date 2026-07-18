@@ -2,7 +2,7 @@
 
 Ce document est la **spécification opérationnelle vivante** du monorepo OpenG7. Il s’adresse aux agents IA et aux contributeurs humains qui créent, modifient, testent ou documentent le front Angular, le CMS Strapi, les contrats partagés et le tooling.
 
-- [`ARCHITECTURE.md`](./ARCHITECTURE.md) décrit les principes durables, les frontières et la direction des dépendances.
+- [`ARCHITECTURE.md`](./docs/ARCHITECTURE.md) décrit les principes durables, les frontières et la direction des dépendances.
 - `AGENTS.md` transforme ces principes en règles exécutables, registres, étapes de travail et critères d’acceptation.
 - En cas de divergence, corriger les deux documents dans la même pull request plutôt que d’introduire une exception silencieuse.
 

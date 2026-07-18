@@ -1,16 +1,18 @@
 # Inventaire des workflows
 
-Ce dépôt est un modèle de gouvernance, pas une application buildable (voir [`README.md`](../../README.md)). Les 11 workflows hérités du produit ont été audités pour distinguer ce qui est réellement exécutable ici de ce qui appartient au(x) dépôt(s) produit (`openg7-nexus`). État actuel après audit : 5 workflows actifs, 6 supprimés.
+Ce dépôt est un modèle de gouvernance, pas une application buildable (voir [`README.md`](../../README.md)). Les 11 workflows hérités du produit ont été audités pour distinguer ce qui est réellement exécutable ici de ce qui appartient au(x) dépôt(s) produit (`openg7-nexus`). État actuel après audit : 6 workflows actifs (dont un nouveau, propre au template), 6 supprimés.
 
 Constat transversal : `package.json`, `yarn.lock` et `.nvmrc` racine n'existent pas dans ce dépôt, pas plus que les workspaces `openg7-org`, `strapi`, `packages/contracts`, `packages/tooling` qu'ils référençaient. Tout workflow qui suppose leur présence échouera tel quel dans ce dépôt.
 
 ## A — Validations applicables au dépôt template
 
-Aucun des 11 workflows hérités ne rentre dans cette catégorie tel quel : ils valident tous du code produit (Angular/Strapi) qui n'existe pas ici. Ce qui manque encore et reste à créer :
+Aucun des 11 workflows hérités ne rentrait dans cette catégorie tel quel : ils validaient tous du code produit (Angular/Strapi) qui n'existe pas ici.
 
-- Validation de structure des registres dans `AGENTS.md` (tables de sélecteurs bien formées, tags `[ui: ...] [scope: ...]`).
-- Validation des fichiers `.github/instructions/*.instructions.md` (frontmatter `applyTo` présent, ancre de ligne valide vers `AGENTS.md`).
-- Lint Markdown / liens morts sur `AGENTS.md`, `ARCHITECTURE.md`, `README.md`.
+| Workflow | Déclencheur | Ce qu'il valide |
+| --- | --- | --- |
+| `template-quality.yml` | `pull_request`, `push: main` | Exécute `node scripts/check-project-standards.mjs` : présence de `README.md`/`AGENTS.md`/`ARCHITECTURE.md`, sections obligatoires d'`AGENTS.md`, frontmatter des `.github/instructions/*.instructions.md` et des `.agents/skills/*/SKILL.md`, dérive des pointeurs `(ligne N)` vers `AGENTS.md`, liens Markdown locaux morts. |
+
+Ce script a déjà détecté et permis de corriger deux liens croisés cassés entre `AGENTS.md` et `docs/ARCHITECTURE.md` hérités du commit initial.
 
 ## B — Workflows génériques réutilisables (actifs, généralisés)
 
@@ -39,8 +41,12 @@ Ces six workflows ont été retirés de `.github/workflows/` : ils n'avaient auc
 
 Leur contenu original reste consultable dans l'historique git de ce dépôt (avant leur suppression) pour servir de base à leur recréation dans `openg7-nexus`.
 
+## Synchronisation vers les dépôts produits
+
+`scripts/sync-openg7-standards.mjs` (voir [`README.md`](../../README.md)) copie les fichiers listés dans `scripts/sync-manifest.json` — dont les workflows de la catégorie B et `.agents/skills/` — vers un dépôt cible. Ce script est un outil local (`--target <chemin>`), volontairement non automatisé en CI cross-repo : ouvrir une PR automatique dans `openg7-nexus` depuis ce dépôt demanderait un jeton avec accès à ce dépôt et reste une décision à prendre séparément.
+
 ## Prochaine étape
 
-Catégorie A (validations propres au template : structure des registres `AGENTS.md`, validation des `.instructions.md`, lint Markdown) reste à construire — aucun workflow existant ne la couvre encore.
+Reste ouvert : `ecosystem-guardrails.yml` continue d'appeler `tools/check-ecosystem-boundaries.js`, absent de ce dépôt (voir catégorie B) ; et l'automatisation éventuelle de la synchronisation cross-repo (PR automatique vers `openg7-nexus`) n'a pas été mise en place, faute de secret/target confirmé.
 
 _Dernière révision : 2026-07-18_

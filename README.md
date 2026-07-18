@@ -11,6 +11,8 @@
 - [`AGENTS.md`](./AGENTS.md) — le règlement d'exécution pour les agents IA et les contributeurs humains (registres de sélecteurs, Definition of Done, checklists par domaine).
 - [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — les principes architecturaux durables (frontières des workspaces, direction des dépendances, conventions Atomic Design).
 - [`.github/`](./.github/) — l'outillage GitHub commun : templates d'issues et de pull requests, instructions Copilot scopées, workflows CI génériques et réutilisables.
+- [`.agents/skills/`](./.agents/skills/) — procédures documentées, neutres vis-à-vis de l'outil, pour les tâches récurrentes (créer un composant conforme, réviser une PR pour conformité architecturale).
+- [`scripts/`](./scripts/) — outillage de gouvernance : validation des standards du template (`check-project-standards.mjs`) et synchronisation vers les dépôts produits (`sync-openg7-standards.mjs`).
 
 Le produit lui-même (front Angular, CMS Strapi, contrats partagés, scripts d'infra) vit dans les dépôts applicatifs, notamment [`openg7-nexus`](https://github.com/openg7/openg7-nexus). Ce gabarit sert de source de vérité pour leurs règles, pas de copie exécutable de leur code.
 
@@ -20,6 +22,7 @@ Le produit lui-même (front Angular, CMS Strapi, contrats partagés, scripts d'i
 2. Adapter `AGENTS.md` et `ARCHITECTURE.md` uniquement si le nouveau projet s'écarte volontairement des standards OpenG7 — documenter l'écart plutôt que de le laisser implicite.
 3. Garder les deux documents synchronisés : toute divergence entre eux doit être corrigée dans la même pull request (voir la règle 3 d'`AGENTS.md`).
 4. Consulter `.github/workflows/README.md` avant d'activer un workflow : certains sont génériques et réutilisables tels quels, d'autres sont propres à la stack Angular/Strapi et doivent être adaptés ou déplacés vers le dépôt produit.
+5. Pour repousser une mise à jour de gouvernance vers un dépôt déjà créé, utiliser `node scripts/sync-openg7-standards.mjs --target <chemin-du-depot>` (`--check` pour détecter la dérive sans écrire, `--dry-run` pour prévisualiser). La liste exacte des fichiers synchronisés est dans `scripts/sync-manifest.json`.
 
 ## Structure
 
@@ -29,6 +32,12 @@ openg7-project-template/
 ├─ README.md                       # Ce document
 ├─ docs/
 │  └─ ARCHITECTURE.md              # Principes architecturaux durables
+├─ scripts/
+│  ├─ check-project-standards.mjs  # Valide la structure du template (CI)
+│  ├─ sync-openg7-standards.mjs    # Propage la gouvernance vers un dépôt produit
+│  └─ sync-manifest.json           # Liste des fichiers synchronisés
+├─ .agents/
+│  └─ skills/                      # Procédures neutres vis-à-vis de l'outil (voir README du dossier)
 └─ .github/
    ├─ copilot-instructions.md      # Point d'entrée Copilot, renvoie vers AGENTS.md
    ├─ instructions/                # Instructions Copilot scopées par domaine
@@ -52,6 +61,8 @@ Ce modèle est conçu pour être exploité par plusieurs agents IA (Claude, Code
 - [`AGENTS.md`](./AGENTS.md) — the executable rulebook for AI agents and human contributors (selector registries, Definition of Done, per-domain checklists).
 - [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — durable architectural principles (workspace boundaries, dependency direction, Atomic Design conventions).
 - [`.github/`](./.github/) — shared GitHub tooling: issue and pull request templates, scoped Copilot instructions, generic and reusable CI workflows.
+- [`.agents/skills/`](./.agents/skills/) — tool-agnostic documented procedures for recurring tasks (creating a compliant component, reviewing a PR for architectural compliance).
+- [`scripts/`](./scripts/) — governance tooling: template standards validation (`check-project-standards.mjs`) and sync to product repositories (`sync-openg7-standards.mjs`).
 
 The actual product (Angular front-end, Strapi CMS, shared contracts, infra scripts) lives in application repositories, notably [`openg7-nexus`](https://github.com/openg7/openg7-nexus). This template is the source of truth for their rules, not an executable copy of their code.
 
@@ -61,6 +72,7 @@ The actual product (Angular front-end, Strapi CMS, shared contracts, infra scrip
 2. Only adapt `AGENTS.md` and `ARCHITECTURE.md` when the new project deliberately diverges from OpenG7 standards — document the divergence instead of leaving it implicit.
 3. Keep both documents in sync: any divergence between them must be fixed in the same pull request (see rule 3 in `AGENTS.md`).
 4. Check `.github/workflows/README.md` before enabling a workflow: some are generic and reusable as-is, others are specific to the Angular/Strapi stack and must be adapted or moved to the product repository.
+5. To push a governance update to an already-created repository, run `node scripts/sync-openg7-standards.mjs --target <path-to-repo>` (`--check` to detect drift without writing, `--dry-run` to preview). The exact list of synced files lives in `scripts/sync-manifest.json`.
 
 ## Multi-agent support
 
