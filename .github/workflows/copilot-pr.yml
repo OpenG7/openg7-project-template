@@ -8,16 +8,10 @@ on:
         required: true
         type: string
       scope:
-        description: 'Zone demandee pour la tentative de delegation.'
-        required: true
-        default: openg7-org
-        type: choice
-        options:
-          - openg7-org
-          - strapi
-          - packages-contracts
-          - packages-tooling
-          - repository-root
+        description: 'Repertoire relatif demande pour la tentative de delegation. Laisser vide ou "repository-root" pour l ensemble du depot.'
+        required: false
+        default: repository-root
+        type: string
       base_branch:
         description: 'Branche de base pour la PR.'
         required: true

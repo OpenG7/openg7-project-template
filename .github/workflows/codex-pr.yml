@@ -8,16 +8,10 @@ on:
         required: true
         type: string
       scope:
-        description: 'Zone autorisee pour la premiere iteration.'
-        required: true
-        default: openg7-org
-        type: choice
-        options:
-          - openg7-org
-          - strapi
-          - packages-contracts
-          - packages-tooling
-          - repository-root
+        description: 'Repertoire relatif a cibler (ex: src, packages/contracts). Laisser vide ou "repository-root" pour l ensemble du depot.'
+        required: false
+        default: repository-root
+        type: string
       base_branch:
         description: 'Branche de base pour la PR.'
         required: true
@@ -81,42 +75,58 @@ jobs:
         id: scope
         shell: bash
         run: |
-          case "${{ github.event.inputs.scope }}" in
-            openg7-org)
-              workdir="openg7-org"
-              ;;
-            strapi)
-              workdir="strapi"
-              ;;
-            packages-contracts)
-              workdir="packages/contracts"
-              ;;
-            packages-tooling)
-              workdir="packages/tooling"
-              ;;
-            repository-root)
-              workdir="."
-              ;;
-            *)
-              echo "Unsupported scope: ${{ github.event.inputs.scope }}" >&2
-              exit 1
-              ;;
-          esac
+          raw="${{ github.event.inputs.scope }}"
+          if [ -z "$raw" ] || [ "$raw" = "repository-root" ] || [ "$raw" = "." ]; then
+            workdir="."
+            slug="repository-root"
+          else
+            case "$raw" in
+              /*|*..*)
+                echo "Unsupported scope: must be a relative path without '..': $raw" >&2
+                exit 1
+                ;;
+              *)
+                workdir="$raw"
+                slug="$(printf '%s' "$raw" | tr '/ ' '--')"
+                ;;
+            esac
+          fi
 
-          branch="codex/${{ github.event.inputs.scope }}-${{ github.run_id }}-${{ github.run_attempt }}"
+          branch="codex/${slug}-${{ github.run_id }}-${{ github.run_attempt }}"
           echo "workdir=$workdir" >> "$GITHUB_OUTPUT"
           echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      - name: Detect package manager
+        id: pm
+        shell: bash
+        run: |
+          if [ -f yarn.lock ]; then
+            echo "pm=yarn" >> "$GITHUB_OUTPUT"
+            echo "install=corepack enable && yarn install --immutable" >> "$GITHUB_OUTPUT"
+            echo "cache=yarn" >> "$GITHUB_OUTPUT"
+          elif [ -f pnpm-lock.yaml ]; then
+            echo "pm=pnpm" >> "$GITHUB_OUTPUT"
+            echo "install=corepack enable && pnpm install --frozen-lockfile" >> "$GITHUB_OUTPUT"
+            echo "cache=pnpm" >> "$GITHUB_OUTPUT"
+          elif [ -f package-lock.json ]; then
+            echo "pm=npm" >> "$GITHUB_OUTPUT"
+            echo "install=npm ci" >> "$GITHUB_OUTPUT"
+            echo "cache=npm" >> "$GITHUB_OUTPUT"
+          else
+            echo "pm=none" >> "$GITHUB_OUTPUT"
+            echo "install=echo 'No lockfile found, skipping install'" >> "$GITHUB_OUTPUT"
+            echo "cache=" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up Node
         uses: actions/setup-node@v5
         with:
           node-version: '20'
-          cache: 'yarn'
+          cache: ${{ steps.pm.outputs.cache }}
 
       - name: Install workspace dependencies
-        run: |
-          corepack enable
-          yarn install --immutable
+        if: steps.pm.outputs.pm != 'none'
+        run: ${{ steps.pm.outputs.install }}
 
       - name: Run Codex in selected scope
         id: run_codex
