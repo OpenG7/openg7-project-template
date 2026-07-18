@@ -1,0 +1,29 @@
+name: Product Checklist Audit
+
+on:
+  schedule:
+    - cron: '0 6 * * 1,4'
+  workflow_dispatch:
+
+jobs:
+  verify-checklist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+      - name: Install dependencies
+        run: |
+          corepack enable
+          yarn install --immutable
+      - name: Sync checklist snapshot
+        run: yarn sync:checklist
+      - name: Ensure checklist matches repository state
+        run: |
+          if ! git diff --quiet --exit-code openg7-org/CHECKLIST.md; then
+            echo '::error::Product checklist is out of sync with the codebase. Run `yarn sync:checklist` and commit the result.' >&2
+            git diff openg7-org/CHECKLIST.md
+            exit 1
+          fi

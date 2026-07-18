@@ -1,0 +1,42 @@
+﻿name: Ecosystem Guardrails
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  ecosystem-boundaries:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Detect package manager
+        id: pm
+        shell: bash
+        run: |
+          if [ -f yarn.lock ]; then
+            echo "pm=yarn" >> $GITHUB_OUTPUT
+            echo "install=corepack enable && yarn install --immutable" >> $GITHUB_OUTPUT
+            echo "cache=yarn" >> $GITHUB_OUTPUT
+          elif [ -f pnpm-lock.yaml ]; then
+            echo "pm=pnpm" >> $GITHUB_OUTPUT
+            echo "install=corepack enable && pnpm install --frozen-lockfile" >> $GITHUB_OUTPUT
+            echo "cache=pnpm" >> $GITHUB_OUTPUT
+          elif [ -f package-lock.json ]; then
+            echo "pm=npm" >> $GITHUB_OUTPUT
+            echo "install=npm ci" >> $GITHUB_OUTPUT
+            echo "cache=npm" >> $GITHUB_OUTPUT
+          else
+            echo "pm=none" >> $GITHUB_OUTPUT
+            echo "install=echo 'No lockfile found, skipping install'" >> $GITHUB_OUTPUT
+            echo "cache=" >> $GITHUB_OUTPUT
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: ${{ steps.pm.outputs.cache }}
+      - name: Install dependencies
+        if: steps.pm.outputs.pm != 'none'
+        run: ${{ steps.pm.outputs.install }}
+      - name: Run ecosystem guardrails
+        run: node tools/check-ecosystem-boundaries.js
