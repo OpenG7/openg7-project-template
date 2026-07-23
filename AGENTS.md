@@ -655,6 +655,20 @@ Configurer `app.routes.ts` (lazy routes + canMatch) et `app.config.ts` (HTTP_INT
 - `openg7-org/src/app/app.config.ts` : providers globaux (HTTP_INTERCEPTORS, TranslateLoader, TransferState).
 - SSR : **aucune** API `window` au module load ; tester `isPlatformBrowser` dans les effets/constructeurs si besoin.
 
+### 4.4 Analyse fonctionnelle et garanties d’exécution
+
+Pour évaluer l’état réel d’une fonctionnalité, toujours considérer deux axes complémentaires :
+
+- **Fonctionnalités visibles** : pages, parcours utilisateur, contenu public, états UI, accessibilité, i18n, UX mobile et desktop, et valeur réellement livrée à l’utilisateur.
+- **Garanties d’exécution** : tests automatisés, E2E verts, fixtures stables, CI/CD, migrations, Docker local, intégrations externes, smoke tests et comportement observable en production.
+
+Une fonctionnalité peut être présente dans l’interface sans être suffisamment garantie à l’exécution. À l’inverse, une infrastructure peut être bien testée sans couvrir toute la valeur produit attendue.
+
+Les bilans, priorisations et réponses sur le « reste à faire » doivent distinguer explicitement :
+
+- ce qui manque pour l’utilisateur;
+- ce qui manque pour prouver que le système fonctionne de façon fiable.
+
 ---
 
 ## 5) Strapi — Seeds (fichiers & rôles)
