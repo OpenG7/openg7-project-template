@@ -1,114 +1,119 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { START, END, commonRange } from './check-project-standards.mjs';
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const usage =
+  'Usage: node scripts/sync-openg7-standards.mjs --target <depot> [--check | --dry-run]';
 
-function parseArgs(argv) {
-  const args = { target: null, check: false, dryRun: false };
-  for (let i = 0; i < argv.length; i += 1) {
-    const arg = argv[i];
-    if (arg === '--target') {
-      args.target = argv[i + 1];
-      i += 1;
-    } else if (arg === '--check') {
-      args.check = true;
-    } else if (arg === '--dry-run') {
-      args.dryRun = true;
-    } else if (arg === '--help' || arg === '-h') {
-      args.help = true;
+function localFile(root, relative) {
+  if (
+    !/^[\w./-]+$/.test(relative) ||
+    relative.startsWith('/') ||
+    relative.split('/').includes('..')
+  )
+    throw Error(`Chemin interdit: ${relative}`);
+  let current = root;
+  for (const part of relative.split('/')) {
+    current = path.join(current, part);
+    try {
+      if (fs.lstatSync(current).isSymbolicLink())
+        throw Error(`Lien symbolique interdit: ${current}`);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
     }
   }
-  return args;
+  return current;
 }
 
-function printUsage() {
-  console.log(`Usage: node scripts/sync-openg7-standards.mjs --target <chemin-du-depot-cible> [--check] [--dry-run]
-
-Copie les fichiers de gouvernance OpenG7 (AGENTS.md, ARCHITECTURE.md, instructions
-Copilot, templates GitHub, workflows de dispatch agent, skills) depuis ce template
-vers un dépôt cible, tel que listé dans scripts/sync-manifest.json.
-
-  --target <path>  Chemin (relatif ou absolu) vers une copie locale du dépôt cible.
-  --check          N'écrit rien ; rapporte les fichiers absents ou en dérive et sort en erreur si des différences existent.
-  --dry-run        N'écrit rien ; rapporte ce qui serait copié, sort toujours en succès.
-`);
-}
-
-const args = parseArgs(process.argv.slice(2));
-
-if (args.help || !args.target) {
-  printUsage();
-  process.exit(args.help ? 0 : 1);
-}
-
-const targetRoot = resolve(process.cwd(), args.target);
-if (!existsSync(targetRoot)) {
-  console.error(`Le dépôt cible n'existe pas : ${targetRoot}`);
-  process.exit(1);
-}
-
-const manifestPath = join(repoRoot, 'scripts', 'sync-manifest.json');
-const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
-
-const created = [];
-const updated = [];
-const unchanged = [];
-const missingSource = [];
-
-for (const relPath of manifest.files) {
-  const sourcePath = join(repoRoot, relPath);
-  const destPath = join(targetRoot, relPath);
-
-  if (!existsSync(sourcePath)) {
-    missingSource.push(relPath);
-    continue;
+export function planSync(targetRoot, templateRoot = sourceRoot) {
+  const target = path.resolve(targetRoot);
+  if (!fs.existsSync(target) || !fs.statSync(target).isDirectory())
+    throw Error('Le dépôt cible doit exister.');
+  const comparable = (value) => (process.platform === 'win32' ? value.toLowerCase() : value);
+  if (comparable(fs.realpathSync(target)) !== comparable(target))
+    throw Error('La cible doit être un chemin réel, sans lien symbolique.');
+  if (target === path.resolve(templateRoot))
+    throw Error('Le template ne peut pas être sa propre cible.');
+  const manifest = JSON.parse(
+    fs.readFileSync(path.join(templateRoot, 'scripts/sync-manifest.json'), 'utf8'),
+  );
+  if (
+    manifest.version !== 1 ||
+    !Array.isArray(manifest.files) ||
+    new Set(manifest.files).size !== manifest.files.length
+  )
+    throw Error('Manifest invalide.');
+  if (
+    manifest.files.some(
+      (f) =>
+        ![
+          'docs/standards/agent-common.md',
+          'docs/standards/README.md',
+          'scripts/check-project-standards.mjs',
+          '.github/workflows/agent-standards.yml',
+        ].includes(f),
+    )
+  )
+    throw Error('Le manifest doit rester limité aux fichiers communs.');
+  const agentsPath = localFile(target, 'AGENTS.md');
+  const original = fs.readFileSync(agentsPath, 'utf8');
+  const range = commonRange(original);
+  const common = fs
+    .readFileSync(localFile(templateRoot, 'docs/standards/agent-common.md'), 'utf8')
+    .replace(/\r\n/g, '\n')
+    .trim();
+  const newline = original.includes('\r\n') ? '\r\n' : '\n';
+  const replacement = [START, '', common, '', END].join('\n').replace(/\n/g, newline);
+  const next = original.slice(0, range.start) + replacement + original.slice(range.end);
+  const changes = [{ file: 'AGENTS.md', dest: agentsPath, content: Buffer.from(next) }];
+  for (const file of manifest.files) {
+    const source = localFile(templateRoot, file);
+    const dest = localFile(target, file);
+    const content = fs.readFileSync(source);
+    if (fs.existsSync(dest) && !fs.statSync(dest).isFile())
+      throw Error(`Destination non fichier: ${file}`);
+    let parent = path.dirname(dest);
+    while (!fs.existsSync(parent)) parent = path.dirname(parent);
+    if (!fs.statSync(parent).isDirectory()) throw Error(`Parent non répertoire: ${file}`);
+    changes.push({ file, dest, content });
   }
-
-  const sourceContent = readFileSync(sourcePath);
-  const destExists = existsSync(destPath);
-  const destContent = destExists ? readFileSync(destPath) : null;
-
-  if (destExists && Buffer.compare(sourceContent, destContent) === 0) {
-    unchanged.push(relPath);
-    continue;
-  }
-
-  if (destExists) {
-    updated.push(relPath);
-  } else {
-    created.push(relPath);
-  }
-
-  if (!args.check && !args.dryRun) {
-    mkdirSync(dirname(destPath), { recursive: true });
-    writeFileSync(destPath, sourceContent);
-  }
+  return changes.filter(
+    (c) => !fs.existsSync(c.dest) || !fs.readFileSync(c.dest).equals(c.content),
+  );
 }
 
-if (missingSource.length > 0) {
-  console.warn(`⚠ Fichiers listés dans le manifeste mais introuvables dans ce dépôt :`);
-  for (const relPath of missingSource) console.warn(`  - ${relPath}`);
-}
-
-const drifted = [...created, ...updated];
-
-if (args.check) {
-  if (drifted.length === 0) {
-    console.log(`✓ ${targetRoot} est aligné avec le contrat de gouvernance OpenG7 (${manifest.files.length} fichiers vérifiés).`);
-    process.exit(0);
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    const args = process.argv.slice(2);
+    if (args.length === 1 && ['--help', '-h'].includes(args[0])) console.log(usage);
+    else {
+      let target;
+      let mode = 'write';
+      for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        if (arg === '--target' && !target && args[i + 1] && !args[i + 1].startsWith('--'))
+          target = args[++i];
+        else if (['--check', '--dry-run'].includes(arg) && mode === 'write') mode = arg;
+        else throw Error(usage);
+      }
+      if (!target) throw Error(usage);
+      const changes = planSync(target);
+      if (mode === 'write')
+        for (const change of changes) {
+          fs.mkdirSync(path.dirname(change.dest), { recursive: true });
+          fs.writeFileSync(change.dest, change.content);
+        }
+      console.log(
+        `${changes.length} fichier(s) ${mode === 'write' ? 'synchronisé(s)' : 'en dérive'}; mission et règles locales conservées.`,
+      );
+      for (const change of changes) console.log(change.file);
+      if (mode === '--check' && changes.length) process.exitCode = 1;
+    }
+  } catch (error) {
+    console.error(error.message);
+    process.exitCode = 2;
   }
-  console.error(`✗ ${drifted.length} fichier(s) en dérive par rapport au template :`);
-  for (const relPath of created) console.error(`  + manquant  : ${relPath}`);
-  for (const relPath of updated) console.error(`  ~ différent : ${relPath}`);
-  process.exit(1);
-}
-
-const verb = args.dryRun ? 'seraient copiés' : 'ont été copiés';
-console.log(`${created.length} fichier(s) créé(s), ${updated.length} fichier(s) mis à jour, ${unchanged.length} inchangé(s).`);
-if (drifted.length > 0) {
-  console.log(`Fichiers qui ${verb} :`);
-  for (const relPath of created) console.log(`  + ${relPath}`);
-  for (const relPath of updated) console.log(`  ~ ${relPath}`);
 }
