@@ -1,173 +1,234 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import fs from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const errors = [];
-const warnings = [];
+export const START = '<!-- openg7:common:start -->';
+export const END = '<!-- openg7:common:end -->';
+const ignored = new Set([
+  '.git',
+  '.yarn',
+  '.pnp',
+  'node_modules',
+  '.venv',
+  'venv',
+  'dist',
+  'build',
+  'coverage',
+  'test-results',
+  'playwright-report',
+  'backups',
+  '.angular',
+]);
+const slash = (s) => s.split(path.sep).join('/');
 
-function rel(path) {
-  return relative(repoRoot, path).split('\\').join('/');
-}
-
-function requireFile(path, message) {
-  if (!existsSync(path)) {
-    errors.push(`${message}: ${rel(path)} est introuvable.`);
-    return false;
+export function commonRange(text) {
+  const start = text.indexOf(START);
+  const end = text.indexOf(END);
+  if (
+    start < 0 ||
+    end < start ||
+    text.indexOf(START, start + 1) >= 0 ||
+    text.indexOf(END, end + 1) >= 0
+  ) {
+    throw new Error(
+      'AGENTS.md: un seul bloc commun délimité est requis; migration explicite nécessaire.',
+    );
   }
-  return true;
+  return { start, end: end + END.length, content: text.slice(start + START.length, end).trim() };
 }
 
-function walkMarkdownFiles(dir) {
-  const files = [];
-  if (!existsSync(dir)) return files;
-  const walk = (current) => {
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
-      const entryPath = join(current, entry.name);
-      if (entry.isDirectory()) walk(entryPath);
-      else if (entry.name.endsWith('.md')) files.push(entryPath);
-    }
+function prose(text) {
+  let fence = null;
+  return text
+    .split(/\r?\n/)
+    .map((line) => {
+      const marker = line.match(/^\s{0,3}(`{3,}|~{3,})/);
+      if (marker) {
+        if (!fence) fence = marker[1];
+        else if (marker[1][0] === fence[0] && marker[1].length >= fence.length) fence = null;
+        return '';
+      }
+      return fence ? '' : line;
+    })
+    .join('\n');
+}
+
+function anchors(text) {
+  const clean = prose(text);
+  const found = new Set([...clean.matchAll(/<a\s+(?:id|name)=["']([^"']+)["']/g)].map((m) => m[1]));
+  const counts = new Map();
+  for (const match of clean.matchAll(/^#{1,6}\s+(.+?)\s*#*$/gm)) {
+    const base = match[1]
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+      .replace(/<[^>]+>/g, '')
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\p{M}_\-\s]/gu, '')
+      .replace(/\s/g, '-');
+    const count = counts.get(base) ?? 0;
+    found.add(count ? `${base}-${count}` : base);
+    counts.set(base, count + 1);
+  }
+  return found;
+}
+
+export function checkProject(repoRoot) {
+  const root = path.resolve(repoRoot);
+  const errors = [];
+  const documents = new Map();
+  const instructions = [];
+  const sizes = {};
+  let checkedLinks = 0;
+  const load = (file) => {
+    if (!documents.has(file)) documents.set(file, fs.readFileSync(path.join(root, file), 'utf8'));
+    return documents.get(file);
   };
-  walk(dir);
-  return files;
-}
-
-function checkRequiredFiles() {
-  requireFile(join(repoRoot, 'README.md'), 'Fichier racine manquant');
-  requireFile(join(repoRoot, 'AGENTS.md'), 'Fichier racine manquant');
-  requireFile(join(repoRoot, 'docs', 'ARCHITECTURE.md'), 'Fichier de gouvernance manquant');
-}
-
-function checkAgentsRequiredSections() {
-  const agentsPath = join(repoRoot, 'AGENTS.md');
-  if (!existsSync(agentsPath)) return;
-  const content = readFileSync(agentsPath, 'utf8');
-  const requiredHeadings = [
-    'Règles non négociables pour les agents',
-    'Definition of Done',
-    'Maintenance de ce document',
-  ];
-  for (const heading of requiredHeadings) {
-    if (!content.includes(heading)) {
-      errors.push(`AGENTS.md : section obligatoire absente ("${heading}").`);
+  function walk(dir = '') {
+    for (const entry of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
+      if (ignored.has(entry.name) || entry.isSymbolicLink()) continue;
+      const rel = path.posix.join(dir, entry.name);
+      if (entry.isDirectory()) walk(rel);
+      else if (/^AGENTS(?:\.override)?\.md$/.test(entry.name)) instructions.push(rel);
     }
   }
-}
-
-function extractFrontmatter(content) {
-  if (!content.startsWith('---')) return null;
-  const end = content.indexOf('\n---', 3);
-  if (end === -1) return null;
-  return content.slice(3, end).trim();
-}
-
-function checkInstructionFiles() {
-  const dir = join(repoRoot, '.github', 'instructions');
-  if (!existsSync(dir)) {
-    warnings.push('.github/instructions/ est absent : aucune instruction Copilot scopée.');
-    return;
+  walk();
+  const sources = new Set(instructions);
+  for (const file of ['AGENTS.md', 'docs/standards/agent-common.md', 'docs/standards/README.md']) {
+    if (!fs.existsSync(path.join(root, file))) errors.push(`Fichier requis absent: ${file}`);
+    else sources.add(file);
   }
-
-  for (const entry of readdirSync(dir)) {
-    if (!entry.endsWith('.instructions.md')) continue;
-    const filePath = join(dir, entry);
-    const frontmatter = extractFrontmatter(readFileSync(filePath, 'utf8'));
-
-    if (!frontmatter || !/applyTo:/.test(frontmatter)) {
-      errors.push(`${rel(filePath)} : frontmatter "applyTo" manquant ou mal formé.`);
+  if (!fs.existsSync(path.join(root, 'README.md'))) errors.push('README.md absent.');
+  const architecture = ['docs/ARCHITECTURE.md', 'ARCHITECTURE.md'].find((f) =>
+    fs.existsSync(path.join(root, f)),
+  );
+  if (architecture) sources.add(architecture);
+  else errors.push('Architecture locale absente.');
+  function collect(dir) {
+    if (!fs.existsSync(path.join(root, dir))) return;
+    for (const entry of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
+      const rel = path.posix.join(dir, entry.name);
+      if (entry.isSymbolicLink()) continue;
+      if (entry.isDirectory()) collect(rel);
+      else if (entry.name.endsWith('.md')) sources.add(rel);
     }
   }
-}
-
-function checkSkillFiles() {
-  const dir = join(repoRoot, '.agents', 'skills');
-  if (!existsSync(dir)) {
-    warnings.push('.agents/skills/ est absent : aucune procédure enregistrée.');
-    return;
+  for (const dir of ['.github/instructions', '.agents/skills', 'docs/agents']) collect(dir);
+  for (const file of [
+    '.github/copilot-instructions.md',
+    '.github/pull_request_template.md',
+    '.github/workflows/README.md',
+  ]) {
+    if (fs.existsSync(path.join(root, file))) sources.add(file);
+  }
+  try {
+    const text = load('AGENTS.md');
+    const common = load('docs/standards/agent-common.md').replace(/\r\n/g, '\n').trim();
+    if (commonRange(text).content.replace(/\r\n/g, '\n') !== common)
+      errors.push('AGENTS.md: dérive du socle commun.');
+    for (const heading of [
+      'Mission',
+      'Socle commun OpenG7',
+      'Périmètre local',
+      'Lectures selon la tâche',
+      'Validation',
+      'Maintenance',
+    ]) {
+      if (!prose(text).split('\n').includes(`## ${heading}`))
+        errors.push(`AGENTS.md: section absente: ${heading}`);
+    }
+  } catch (error) {
+    errors.push(error.message);
   }
 
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const skillPath = join(dir, entry.name, 'SKILL.md');
-    if (!existsSync(skillPath)) {
-      errors.push(`.agents/skills/${entry.name}/ : SKILL.md manquant.`);
-      continue;
+  for (const file of sources) {
+    const text = load(file);
+    const bytes = Buffer.byteLength(text);
+    const isAgent = instructions.includes(file);
+    const isTool = file.startsWith('.github/') || file.startsWith('.agents/');
+    const maxBytes = isAgent ? (file === 'AGENTS.md' ? 8192 : 6144) : isTool ? 4096 : null;
+    sizes[file] = { bytes, ...(maxBytes ? { maxBytes } : {}) };
+    if (maxBytes && bytes > maxBytes) errors.push(`${file}: ${bytes} octets > ${maxBytes}`);
+    if (file.endsWith('AGENTS.override.md'))
+      errors.push(`${file}: utiliser AGENTS.md pour conserver la chaîne du socle commun.`);
+    if (isAgent) {
+      const parents = file.split('/').slice(0, -1);
+      let chain = bytes;
+      for (let i = 0; i < parents.length; i++) {
+        const parent = [...parents.slice(0, i), 'AGENTS.md'].join('/');
+        if (instructions.includes(parent)) chain += Buffer.byteLength(load(parent));
+      }
+      sizes[file].chainBytes = chain;
+      if (chain > 16384) errors.push(`${file}: chaîne ${chain} octets > 16384`);
     }
-    const frontmatter = extractFrontmatter(readFileSync(skillPath, 'utf8'));
-    if (!frontmatter || !/name:/.test(frontmatter) || !/description:/.test(frontmatter)) {
-      errors.push(`${rel(skillPath)} : frontmatter "name"/"description" manquant ou mal formé.`);
+    if (
+      file.endsWith('.instructions.md') &&
+      !/^---\r?\n[\s\S]*?\bapplyTo:\s*\S[\s\S]*?\r?\n---/.test(text)
+    )
+      errors.push(`${file}: applyTo manquant.`);
+    if (file.endsWith('/SKILL.md')) {
+      const front = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+      if (
+        !front ||
+        !/^name:\s*[a-z0-9-]+\s*$/m.test(front[1]) ||
+        !/^description:\s*\S/m.test(front[1])
+      )
+        errors.push(`${file}: frontmatter name/description invalide.`);
+    }
+    if ((isTool || isAgent) && /\blignes?\s+\d+/i.test(text))
+      errors.push(`${file}: remplacer les numéros de ligne par liens/ancres stables.`);
+    for (const match of prose(text).matchAll(/!?\[[^\]]*\]\(([^\s)]+)(?:\s+"[^"]*")?\)/g)) {
+      const href = match[1];
+      if (/^(?:[a-z][\w+.-]*:|\/\/)/i.test(href)) continue;
+      const [raw, anchor] = href.split('#');
+      let target;
+      try {
+        target = raw
+          ? path.resolve(root, path.dirname(file), decodeURIComponent(raw))
+          : path.join(root, file);
+      } catch {
+        errors.push(`${file}: lien mal encodé: ${href}`);
+        continue;
+      }
+      const rel = slash(path.relative(root, target));
+      if (rel === '..' || rel.startsWith('../') || path.isAbsolute(rel)) {
+        errors.push(`${file}: lien hors dépôt: ${href}`);
+        continue;
+      }
+      checkedLinks++;
+      if (!fs.existsSync(target)) errors.push(`${file}: cible absente: ${href}`);
+      else if (anchor && target.endsWith('.md')) {
+        try {
+          if (!anchors(load(rel)).has(decodeURIComponent(anchor)))
+            errors.push(`${file}: ancre absente: ${href}`);
+        } catch {
+          errors.push(`${file}: ancre invalide: ${href}`);
+        }
+      }
     }
   }
+  return { unit: 'UTF-8 bytes; not tokens', files: sizes, checkedLinks, errors };
 }
 
-function checkLineReferenceDrift() {
-  const agentsPath = join(repoRoot, 'AGENTS.md');
-  const agentsLineCount = existsSync(agentsPath)
-    ? readFileSync(agentsPath, 'utf8').split('\n').length
-    : 0;
-  if (agentsLineCount === 0) return;
-
-  const candidateFiles = [
-    ...walkMarkdownFiles(join(repoRoot, '.github', 'instructions')),
-    ...walkMarkdownFiles(join(repoRoot, '.agents', 'skills')),
-  ];
-
-  for (const filePath of candidateFiles) {
-    const content = readFileSync(filePath, 'utf8');
-    const lineRefs = [...content.matchAll(/ligne\s+(\d+)/gi)].map((m) => Number(m[1]));
-    for (const lineNo of lineRefs) {
-      if (lineNo > agentsLineCount) {
-        errors.push(
-          `${rel(filePath)} : référence "ligne ${lineNo}" dépasse la longueur actuelle d'AGENTS.md (${agentsLineCount} lignes). AGENTS.md a probablement été réorganisé sans mettre à jour ce pointeur.`,
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const args = process.argv.slice(2);
+  if (args.some((a) => a !== '--json')) {
+    console.error('Usage: node scripts/check-project-standards.mjs [--json]');
+    process.exitCode = 2;
+  } else {
+    try {
+      const report = checkProject(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'));
+      if (args.includes('--json')) console.log(JSON.stringify(report, null, 2));
+      else {
+        console.log(
+          `${Object.keys(report.files).length} documents; ${report.checkedLinks} liens/ancres; AGENTS racine ${report.files['AGENTS.md']?.bytes ?? 0} octets.`,
         );
+        for (const error of report.errors) console.error(error);
+        if (!report.errors.length) console.log('Standard OpenG7 respecté.');
       }
+      process.exitCode = report.errors.length ? 1 : 0;
+    } catch (error) {
+      console.error(error.message);
+      process.exitCode = 2;
     }
   }
 }
-
-function checkLocalMarkdownLinks() {
-  const filesToScan = [
-    join(repoRoot, 'README.md'),
-    join(repoRoot, 'AGENTS.md'),
-    join(repoRoot, 'docs', 'ARCHITECTURE.md'),
-    ...walkMarkdownFiles(join(repoRoot, '.github')),
-    ...walkMarkdownFiles(join(repoRoot, '.agents')),
-  ];
-
-  const linkPattern = /\]\(([^)]+)\)/g;
-
-  for (const filePath of filesToScan) {
-    if (!existsSync(filePath)) continue;
-    const content = readFileSync(filePath, 'utf8');
-    for (const match of content.matchAll(linkPattern)) {
-      const target = match[1].split('#')[0].trim();
-      if (!target || /^([a-z]+:)?\/\//i.test(target) || target.startsWith('mailto:')) continue;
-      const resolved = resolve(dirname(filePath), target);
-      if (!existsSync(resolved)) {
-        errors.push(`${rel(filePath)} : lien local mort vers "${target}".`);
-      }
-    }
-  }
-}
-
-checkRequiredFiles();
-checkAgentsRequiredSections();
-checkInstructionFiles();
-checkSkillFiles();
-checkLineReferenceDrift();
-checkLocalMarkdownLinks();
-
-for (const warning of warnings) {
-  console.warn(`⚠ ${warning}`);
-}
-
-if (errors.length > 0) {
-  console.error(`\n${errors.length} problème(s) détecté(s) :\n`);
-  for (const error of errors) {
-    console.error(`✗ ${error}`);
-  }
-  process.exit(1);
-}
-
-console.log('✓ Standards du template respectés (fichiers requis, sections AGENTS.md, instructions Copilot, skills, liens locaux).');

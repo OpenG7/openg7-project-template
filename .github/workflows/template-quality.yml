@@ -15,4 +15,4 @@ jobs:
         with:
           node-version: '20'
       - name: Validate template standards
-        run: node scripts/check-project-standards.mjs
+        run: node --test scripts/__tests__/standards.test.mjs
