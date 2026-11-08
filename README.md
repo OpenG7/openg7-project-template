@@ -26,6 +26,14 @@ leurs contrôles et leur synchronisation; aucune application produit.
 5. Exécuter les contrôles ci-dessous; les validations applicatives viennent avec
    les manifests et le code réellement présents.
 
+## Recettes facultatives
+
+La [recette de gateway local](docs/recipes/local-gateway.md) propose un contrat
+de démarrage, d’arrêt depuis un autre terminal et de récupération du routage.
+Chaque projet adapte et livre son propre lanceur, sa configuration et ses tests.
+Cette recette reste hors du socle et de sa synchronisation; elle n’ajoute aucun
+script applicatif exécutable au template.
+
 ## Valider et synchroniser
 
 ```sh
@@ -54,3 +62,5 @@ architecture. Keep the shared marked block identical; load detailed references
 only when relevant. The sync command updates that block and explicitly managed
 files while preserving local mission, architecture, skills and product workflows.
 Run the validator and tool tests above. Check and dry-run modes never write.
+Optional recipes, such as the [local gateway](docs/recipes/local-gateway.md),
+require explicit project adoption and are outside standards synchronization.
